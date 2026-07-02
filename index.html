@@ -372,6 +372,18 @@
         </div>
 
         <div class="form-group">
+          <label>최상위 래퍼 키 (선택)</label>
+          <input type="text" id="inputWrapperKey" placeholder="예: storyBridges (비우면 배열만 저장)">
+          <div class="hint">지정하면 결과가 { "래퍼키": [ ... ] } 형태로 감싸져 저장됩니다.</div>
+        </div>
+
+        <div class="form-group">
+          <label>그룹 기준 컬럼 (선택)</label>
+          <input type="text" id="inputGroupByColumn" placeholder="예: storyId (비우면 그룹핑 없이 평평한 배열)">
+          <div class="hint">지정하면 이 컬럼 값이 같은 행들을 { "컬럼명": 값, "entries": [ 나머지 컬럼들... ] } 형태로 묶습니다.</div>
+        </div>
+
+        <div class="form-group">
           <label>저장 경로 (선택, 표시용)</label>
           <input type="text" id="inputSavePath" placeholder="예: Assets/Resources/Data (연결한 폴더 하위 표시용 메모)">
           <div class="hint">실제 저장 위치는 사이드바에서 연결한 폴더 기준입니다. 이 필드는 프리셋 구분을 위한 메모용 경로입니다.</div>
@@ -657,6 +669,8 @@
     document.getElementById("inputSheetUrl").value = "";
     document.getElementById("inputSheetTab").value = "";
     document.getElementById("inputFileName").value = "";
+    document.getElementById("inputWrapperKey").value = "";
+    document.getElementById("inputGroupByColumn").value = "";
     document.getElementById("inputSavePath").value = "";
     document.getElementById("extractedIdPreview").textContent = "";
   }
@@ -672,6 +686,8 @@
     const urlRaw = document.getElementById("inputSheetUrl").value.trim();
     const tabName = document.getElementById("inputSheetTab").value.trim();
     const fileName = document.getElementById("inputFileName").value.trim();
+    const wrapperKey = document.getElementById("inputWrapperKey").value.trim();
+    const groupByColumn = document.getElementById("inputGroupByColumn").value.trim();
     const savePath = document.getElementById("inputSavePath").value.trim();
 
     if(!name || !urlRaw || !tabName || !fileName){
@@ -696,6 +712,8 @@
       sourceUrl: urlRaw,
       tabName,
       fileName: finalFileName,
+      wrapperKey: wrapperKey,
+      groupByColumn: groupByColumn,
       savePath: savePath
     });
     savePresets(presets);
@@ -722,7 +740,7 @@
       tr.innerHTML =
         '<td>' + escapeHtml(p.name) + '</td>' +
         '<td>' + escapeHtml(p.tabName) + '</td>' +
-        '<td>' + escapeHtml(p.fileName) + '</td>' +
+        '<td>' + escapeHtml(p.fileName) + (p.wrapperKey ? '<span class="badge">' + escapeHtml(p.wrapperKey) + '</span>' : '') + (p.groupByColumn ? '<span class="badge">grp:' + escapeHtml(p.groupByColumn) + '</span>' : '') + '</td>' +
         '<td class="path-cell" title="' + escapeHtml(p.savePath||"") + '">' + (escapeHtml(p.savePath) || '<span style="color:var(--text-dim)">-</span>') + '</td>' +
         '<td><button class="btn-danger btn-small" data-id="' + p.id + '">삭제</button></td>';
       tbody.appendChild(tr);
@@ -767,7 +785,7 @@
       row.innerHTML =
         '<input type="checkbox" class="parse-check" data-id="' + p.id + '">' +
         '<div class="preset-info">' +
-          '<div class="preset-name">' + escapeHtml(p.name) + '<span class="badge">' + escapeHtml(p.tabName) + '</span></div>' +
+          '<div class="preset-name">' + escapeHtml(p.name) + '<span class="badge">' + escapeHtml(p.tabName) + '</span>' + (p.wrapperKey ? '<span class="badge">' + escapeHtml(p.wrapperKey) + '</span>' : '') + (p.groupByColumn ? '<span class="badge">grp:' + escapeHtml(p.groupByColumn) + '</span>' : '') + '</div>' +
           '<div class="preset-sub">' + escapeHtml(p.fileName) + (p.savePath ? " · " + escapeHtml(p.savePath) : "") + '</div>' +
         '</div>';
       container.appendChild(row);
@@ -826,12 +844,14 @@
           throw new Error("시트에서 데이터를 가져오지 못했습니다 (빈 응답).");
         }
 
-        const jsonArray = rowsToObjects(values);
-        const jsonString = JSON.stringify(jsonArray, null, 2);
+        const flatArray = rowsToObjects(values);
+        const payload = buildJsonPayload(flatArray, preset.groupByColumn, preset.wrapperKey);
+        const jsonString = JSON.stringify(payload, null, 2);
+        const itemCountForLog = Array.isArray(payload) ? payload.length : (payload[preset.wrapperKey] ? payload[preset.wrapperKey].length : flatArray.length);
 
         await writeFile(preset.fileName, jsonString, preset.savePath);
 
-        log("[" + preset.name + "] ✅ 저장 완료: " + preset.fileName + " (" + jsonArray.length + "개 항목)", "ok");
+        log("[" + preset.name + "] ✅ 저장 완료: " + preset.fileName + " (" + itemCountForLog + "개 항목)", "ok");
 
       }catch(err){
         console.error(err);
@@ -855,6 +875,56 @@
       });
       return obj;
     });
+  }
+
+  // groupByColumn이 지정되면: 해당 컬럼 값이 같은 행들을
+  // { [groupByColumn]: 값, entries: [ 나머지 컬럼들로 이뤄진 객체, ... ] } 형태로 묶는다.
+  // wrapperKey가 지정되면: 최종 결과를 { [wrapperKey]: [ ... ] } 로 한 번 더 감싼다.
+  function buildJsonPayload(flatArray, groupByColumn, wrapperKey){
+    let result;
+
+    if(groupByColumn){
+      const groupsOrder = [];
+      const groupsMap = {};
+
+      flatArray.forEach(row=>{
+        const groupValue = row[groupByColumn];
+        const groupKeyStr = String(groupValue);
+
+        if(!groupsMap[groupKeyStr]){
+          groupsMap[groupKeyStr] = {
+            groupValue: groupValue,
+            entries: []
+          };
+          groupsOrder.push(groupKeyStr);
+        }
+
+        // entries 안에는 그룹 기준 컬럼을 뺀 나머지 값들만 넣는다
+        const entryObj = {};
+        Object.keys(row).forEach(key=>{
+          if(key === groupByColumn) return;
+          entryObj[key] = row[key];
+        });
+        groupsMap[groupKeyStr].entries.push(entryObj);
+      });
+
+      result = groupsOrder.map(k=>{
+        const g = groupsMap[k];
+        const obj = {};
+        obj[groupByColumn] = g.groupValue;
+        obj.entries = g.entries;
+        return obj;
+      });
+    } else {
+      result = flatArray;
+    }
+
+    if(wrapperKey){
+      const wrapped = {};
+      wrapped[wrapperKey] = result;
+      return wrapped;
+    }
+    return result;
   }
 
   async function writeFile(fileName, content, savePathHint){
