@@ -866,7 +866,9 @@
 
   function rowsToObjects(values){
     const headers = values[0];
-    const rows = values.slice(1);
+    const types = values[1];
+    const rows = values.slice(2);
+    
     return rows.map(row=>{
       const obj = {};
       headers.forEach((key, idx)=>{
