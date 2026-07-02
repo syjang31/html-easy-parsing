@@ -867,14 +867,31 @@
   function rowsToObjects(values){
     const headers = values[0];
     const rows = values.slice(1);
+
     return rows.map(row=>{
       const obj = {};
       headers.forEach((key, idx)=>{
-        if(key === undefined || key === null || key === "") return;
-        obj[key] = row[idx] !== undefined ? row[idx] : "";
+        if(!key) return;
+        obj[key] = convertValue(row[idx] !== undefined ? row[idx] : "");
       });
       return obj;
     });
+  }
+
+  function convertValue(value){
+    if(value === undefined || value === null) return "";
+    if(typeof value === "number") return value;
+
+    const text = String(value).trim();
+    if(text === "") return "";
+
+    if(/^true$/i.test(text)) return true;
+    if(/^false$/i.test(text)) return false;
+
+    if(/^-?\d+$/.test(text)) return parseInt(text,10);
+    if(/^-?\d+\.\d+$/.test(text)) return parseFloat(text);
+
+    return text;
   }
 
   // groupByColumn이 지정되면: 해당 컬럼 값이 같은 행들을
