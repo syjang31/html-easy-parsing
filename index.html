@@ -311,10 +311,8 @@
 
 <div id="main">
 
-  <!-- ===================== PATH TAB ===================== -->
   <div class="view active" id="view-path">
 
-    <!-- Sub view 1 : list -->
     <div id="path-list-view">
       <div class="top-actions">
         <div>
@@ -332,7 +330,7 @@
               <th>시트 탭</th>
               <th>파일명</th>
               <th>저장 경로</th>
-              <th style="width:70px;"></th>
+              <th style="width:120px;"></th>
             </tr>
           </thead>
           <tbody id="presetTableBody"></tbody>
@@ -341,10 +339,9 @@
       </div>
     </div>
 
-    <!-- Sub view 2 : create -->
     <div id="path-create-view" style="display:none;">
       <div class="top-actions">
-        <h2>경로 생성</h2>
+        <h2 id="pathFormTitle">경로 생성</h2>
         <button id="btnBackToList" class="btn-secondary">← 목록으로</button>
       </div>
 
@@ -397,7 +394,6 @@
     </div>
   </div>
 
-  <!-- ===================== PARSE TAB ===================== -->
   <div class="view" id="view-parse">
     <h2>파싱 실행</h2>
     <div class="subtitle">선택한 프리셋들을 순서대로 불러와 JSON으로 변환하고, 연결된 폴더에 저장합니다.</div>
@@ -418,7 +414,6 @@
     </div>
   </div>
 
-  <!-- ===================== CONFIG TAB ===================== -->
   <div class="view" id="view-config">
     <h2>API 환경설정</h2>
     <div class="subtitle">Google Cloud Console에서 발급받은 키 정보를 입력하세요.</div>
@@ -445,7 +440,6 @@
 
 </div>
 
-<!-- Google Identity Services & GAPI -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://apis.google.com/js/api.js"></script>
 
@@ -455,20 +449,21 @@
 
   /* ============================================================
      STATE
-  ============================================================ */
+  =========================================================== */
   const SCOPES = "https://www.googleapis.com/auth/spreadsheets.readonly";
   let dirHandle = null;          // FileSystemDirectoryHandle
   let tokenClient = null;        // GIS token client
   let accessToken = null;
   let gapiInited = false;
   let gisInited = false;
+  let currentEditId = null;      // 현재 수정 중인 프리셋의 ID
 
   const LS_PRESETS = "sheetTool_presets";
   const LS_CONFIG = "sheetTool_config";
 
   /* ============================================================
      UTIL
-  ============================================================ */
+  =========================================================== */
   function loadPresets(){
     try{
       return JSON.parse(localStorage.getItem(LS_PRESETS)) || [];
@@ -506,7 +501,7 @@
 
   /* ============================================================
      TAB SWITCHING
-  ============================================================ */
+  =========================================================== */
   const tabButtons = document.querySelectorAll(".tab-btn");
   const views = {
     path: document.getElementById("view-path"),
@@ -526,7 +521,7 @@
 
   /* ============================================================
      FOLDER CONNECT (File System Access API)
-  ============================================================ */
+  =========================================================== */
   const folderStatusEl = document.getElementById("folderStatus");
   document.getElementById("btnConnectFolder").addEventListener("click", async ()=>{
     if(!window.showDirectoryPicker){
@@ -547,7 +542,7 @@
 
   /* ============================================================
      GOOGLE AUTH (GIS + GAPI)
-  ============================================================ */
+  =========================================================== */
   const authStatusEl = document.getElementById("authStatus");
   const loginBtn = document.getElementById("btnGoogleLogin");
 
@@ -591,7 +586,6 @@
     }
   }
 
-  // window.onload 대체: 라이브러리가 async로 로드되므로 폴링으로 준비 확인
   function waitForGoogleLibs(){
     const iv = setInterval(()=>{
       if(window.gapi && !gapiInited){ gapiLoaded(); }
@@ -607,10 +601,7 @@
       alert("먼저 'API 환경설정' 탭에서 Google API Key와 OAuth Client ID를 입력 및 저장해주세요.");
       return;
     }
-    if(!gisInited){
-      // 라이브러리가 늦게 로드된 경우 재시도
-      gisLoaded();
-    }
+    if(!gisInited){ gisLoaded(); }
     if(!tokenClient){
       alert("구글 인증 라이브러리 초기화에 실패했습니다. 페이지를 새로고침 후 다시 시도해주세요.");
       return;
@@ -620,7 +611,7 @@
 
   /* ============================================================
      CONFIG TAB
-  ============================================================ */
+  =========================================================== */
   function initConfigView(){
     const cfg = loadConfig();
     document.getElementById("inputApiKey").value = cfg.apiKey || "";
@@ -637,7 +628,6 @@
     const msg = document.getElementById("configSavedMsg");
     msg.textContent = "저장되었습니다. 라이브러리를 다시 초기화합니다...";
     msg.classList.add("connected");
-    // 재초기화
     gapiInited = false; gisInited = false;
     gapiLoaded(); gisLoaded();
     setTimeout(()=>{ msg.textContent = "✅ 설정이 저장되었습니다."; }, 500);
@@ -645,20 +635,25 @@
   initConfigView();
 
   /* ============================================================
-     PATH TAB — LIST / CREATE
-  ============================================================ */
+     PATH TAB — LIST / CREATE / EDIT
+  =========================================================== */
   const listView = document.getElementById("path-list-view");
   const createView = document.getElementById("path-create-view");
+  const pathTitle = document.getElementById("pathFormTitle");
 
   document.getElementById("btnCreatePreset").addEventListener("click", ()=>{
+    currentEditId = null;
+    pathTitle.textContent = "경로 생성";
     clearPresetForm();
     listView.style.display = "none";
     createView.style.display = "block";
   });
+  
   document.getElementById("btnBackToList").addEventListener("click", ()=>{
     createView.style.display = "none";
     listView.style.display = "block";
   });
+  
   document.getElementById("btnCancelPreset").addEventListener("click", ()=>{
     createView.style.display = "none";
     listView.style.display = "block";
@@ -705,18 +700,37 @@
     }
 
     const presets = loadPresets();
-    presets.push({
-      id: uid(),
-      name,
-      spreadsheetId,
-      sourceUrl: urlRaw,
-      tabName,
-      fileName: finalFileName,
-      wrapperKey: wrapperKey,
-      groupByColumn: groupByColumn,
-      savePath: savePath
-    });
+
+    if (currentEditId) {
+      // 수정 모드
+      const idx = presets.findIndex(p => p.id === currentEditId);
+      if (idx !== -1) {
+        presets[idx].name = name;
+        presets[idx].spreadsheetId = spreadsheetId;
+        presets[idx].sourceUrl = urlRaw;
+        presets[idx].tabName = tabName;
+        presets[idx].fileName = finalFileName;
+        presets[idx].wrapperKey = wrapperKey;
+        presets[idx].groupByColumn = groupByColumn;
+        presets[idx].savePath = savePath;
+      }
+    } else {
+      // 생성 모드
+      presets.push({
+        id: uid(),
+        name,
+        spreadsheetId,
+        sourceUrl: urlRaw,
+        tabName,
+        fileName: finalFileName,
+        wrapperKey: wrapperKey,
+        groupByColumn: groupByColumn,
+        savePath: savePath
+      });
+    }
+
     savePresets(presets);
+    currentEditId = null;
 
     createView.style.display = "none";
     listView.style.display = "block";
@@ -742,14 +756,43 @@
         '<td>' + escapeHtml(p.tabName) + '</td>' +
         '<td>' + escapeHtml(p.fileName) + (p.wrapperKey ? '<span class="badge">' + escapeHtml(p.wrapperKey) + '</span>' : '') + (p.groupByColumn ? '<span class="badge">grp:' + escapeHtml(p.groupByColumn) + '</span>' : '') + '</td>' +
         '<td class="path-cell" title="' + escapeHtml(p.savePath||"") + '">' + (escapeHtml(p.savePath) || '<span style="color:var(--text-dim)">-</span>') + '</td>' +
-        '<td><button class="btn-danger btn-small" data-id="' + p.id + '">삭제</button></td>';
+        '<td>' +
+          '<button class="btn-secondary btn-small" data-edit-id="' + p.id + '" style="margin-right:4px;">수정</button>' +
+          '<button class="btn-danger btn-small" data-delete-id="' + p.id + '">삭제</button>' +
+        '</td>';
       tbody.appendChild(tr);
     });
 
-    tbody.querySelectorAll("button[data-id]").forEach(btn=>{
+    // 수정 버튼 이벤트
+    tbody.querySelectorAll("button[data-edit-id]").forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        const id = btn.dataset.editId;
+        const preset = loadPresets().find(p => p.id === id);
+        if(!preset) return;
+
+        currentEditId = id;
+        pathTitle.textContent = "경로 수정";
+        
+        document.getElementById("inputPresetName").value = preset.name;
+        document.getElementById("inputSheetUrl").value = preset.sourceUrl || "";
+        document.getElementById("inputSheetTab").value = preset.tabName;
+        document.getElementById("inputFileName").value = preset.fileName;
+        document.getElementById("inputWrapperKey").value = preset.wrapperKey || "";
+        document.getElementById("inputGroupByColumn").value = preset.groupByColumn || "";
+        document.getElementById("inputSavePath").value = preset.savePath || "";
+
+        document.getElementById("inputSheetUrl").dispatchEvent(new Event("input")); // 추출ID 갱신
+
+        listView.style.display = "none";
+        createView.style.display = "block";
+      });
+    });
+
+    // 삭제 버튼 이벤트
+    tbody.querySelectorAll("button[data-delete-id]").forEach(btn=>{
       btn.addEventListener("click", ()=>{
         if(!confirm("이 프리셋을 삭제하시겠습니까?")) return;
-        const id = btn.dataset.id;
+        const id = btn.dataset.deleteId;
         const remaining = loadPresets().filter(p=>p.id !== id);
         savePresets(remaining);
         renderPresetList();
@@ -766,7 +809,7 @@
 
   /* ============================================================
      PARSE TAB
-  ============================================================ */
+  =========================================================== */
   function renderParseList(){
     const presets = loadPresets();
     const container = document.getElementById("parsePresetList");
@@ -885,9 +928,6 @@
       });
   }
 
-  // groupByColumn이 지정되면: 해당 컬럼 값이 같은 행들을
-  // { [groupByColumn]: 값, entries: [ 나머지 컬럼들로 이뤄진 객체, ... ] } 형태로 묶는다.
-  // wrapperKey가 지정되면: 최종 결과를 { [wrapperKey]: [ ... ] } 로 한 번 더 감싼다.
   function buildJsonPayload(flatArray, groupByColumn, wrapperKey){
     let result;
 
@@ -953,8 +993,6 @@
   }
 
   async function writeFile(fileName, content, savePathHint){
-    // savePath는 표시/메모용이며, 실제 저장은 연결된 dirHandle 최상위에 파일명으로 저장합니다.
-    // 만약 savePathHint에 하위 폴더 구조가 있다면 순차적으로 하위 디렉토리를 생성/탐색합니다.
     let targetDir = dirHandle;
     if(savePathHint){
       const parts = savePathHint.split("/").map(s=>s.trim()).filter(Boolean);
@@ -970,7 +1008,7 @@
 
   /* ============================================================
      INIT
-  ============================================================ */
+  =========================================================== */
   renderPresetList();
   renderParseList();
 
