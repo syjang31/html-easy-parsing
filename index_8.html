@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>구글 시트 JSON 파서 툴</title>
+<style>
+  :root{
+    --bg:#0f1115;
+    --sidebar:#161923;
+    --panel:#1b1f2b;
+    --border:#2a2f3d;
+    --accent:#4f7cff;
+    --accent-hover:#6d92ff;
+    --text:#e6e8ee;
+    --text-dim:#9aa1b1;
+    --danger:#ff5c6c;
+    --danger-hover:#ff7784;
+    --success:#3ecf8e;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Malgun Gothic",sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    height:100vh;
+    display:flex;
+    overflow:hidden;
+  }
+  /* ---------- Sidebar ---------- */
+  #sidebar{
+    width:260px;
+    min-width:260px;
+    background:var(--sidebar);
+    border-right:1px solid var(--border);
+    display:flex;
+    flex-direction:column;
+    padding:20px 16px;
+    gap:16px;
+  }
+  #sidebar h1{
+    font-size:16px;
+    margin:0 0 4px 0;
+    color:var(--text);
+    font-weight:700;
+  }
+  .status-box{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:12px;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  .status-text{
+    font-size:12px;
+    color:var(--text-dim);
+    word-break:break-all;
+  }
+  .status-text.connected{ color:var(--success); }
+  .status-text.disconnected{ color:var(--danger); }
+
+  button{
+    font-family:inherit;
+    cursor:pointer;
+    border:none;
+    border-radius:8px;
+    padding:10px 14px;
+    font-size:13px;
+    font-weight:600;
+    transition:background .15s ease, transform .05s ease;
+  }
+  button:active{ transform:scale(0.98); }
+
+  .btn-primary{
+    background:var(--accent);
+    color:#fff;
+  }
+  .btn-primary:hover{ background:var(--accent-hover); }
+
+  .btn-secondary{
+    background:#2a2f3d;
+    color:var(--text);
+  }
+  .btn-secondary:hover{ background:#343a4a; }
+
+  .btn-danger{
+    background:var(--danger);
+    color:#fff;
+  }
+  .btn-danger:hover{ background:var(--danger-hover); }
+
+  .btn-small{
+    padding:6px 10px;
+    font-size:12px;
+  }
+  .btn-block{ width:100%; }
+
+  /* Tabs */
+  #tabs{
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+    margin-top:8px;
+  }
+  .tab-btn{
+    background:transparent;
+    color:var(--text-dim);
+    text-align:left;
+    padding:12px 14px;
+    border-radius:8px;
+    font-size:14px;
+    font-weight:600;
+    border:1px solid transparent;
+  }
+  .tab-btn:hover{
+    background:var(--panel);
+    color:var(--text);
+  }
+  .tab-btn.active{
+    background:rgba(79,124,255,0.15);
+    color:var(--accent-hover);
+    border:1px solid rgba(79,124,255,0.4);
+  }
+
+  /* ---------- Main ---------- */
+  #main{
+    flex:1;
+    padding:32px 40px;
+    overflow-y:auto;
+  }
+  .view{ display:none; max-width:900px; margin:0 auto; }
+  .view.active{ display:block; }
+
+  h2{
+    margin-top:0;
+    font-size:22px;
+    font-weight:700;
+  }
+  .subtitle{
+    color:var(--text-dim);
+    font-size:13px;
+    margin-top:-8px;
+    margin-bottom:24px;
+  }
+
+  .card{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:24px;
+    margin-bottom:20px;
+  }
+
+  table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:14px;
+  }
+  th, td{
+    text-align:left;
+    padding:10px 12px;
+    border-bottom:1px solid var(--border);
+  }
+  th{
+    color:var(--text-dim);
+    font-weight:600;
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:0.5px;
+  }
+  tr:last-child td{ border-bottom:none; }
+  .path-cell{
+    font-size:12px;
+    color:var(--text-dim);
+    max-width:260px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+
+  .empty-msg{
+    color:var(--text-dim);
+    font-size:13px;
+    padding:20px 0;
+    text-align:center;
+  }
+
+  .top-actions{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:16px;
+  }
+
+  /* Form */
+  .form-group{
+    margin-bottom:18px;
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+  }
+  .form-group label{
+    font-size:13px;
+    font-weight:600;
+    color:var(--text-dim);
+  }
+  .form-group .hint{
+    font-size:11px;
+    color:var(--text-dim);
+    opacity:0.7;
+  }
+  input[type=text], input[type=password]{
+    background:#12141c;
+    border:1px solid var(--border);
+    color:var(--text);
+    padding:10px 12px;
+    border-radius:8px;
+    font-size:14px;
+    font-family:inherit;
+    width:100%;
+  }
+  input[type=text]:focus, input[type=password]:focus{
+    outline:none;
+    border-color:var(--accent);
+  }
+  .form-actions{
+    display:flex;
+    gap:10px;
+    margin-top:8px;
+  }
+
+  /* checklist for parsing tab */
+  .preset-row{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    padding:12px;
+    border-bottom:1px solid var(--border);
+  }
+  .preset-row:last-child{ border-bottom:none; }
+  .preset-row input[type=checkbox]{
+    width:16px;
+    height:16px;
+    accent-color:var(--accent);
+  }
+  .preset-info{
+    display:flex;
+    flex-direction:column;
+  }
+  .preset-name{
+    font-weight:600;
+    font-size:14px;
+  }
+  .preset-sub{
+    font-size:12px;
+    color:var(--text-dim);
+  }
+
+  .log-box{
+    background:#12141c;
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:12px;
+    font-size:12px;
+    font-family:"Consolas","Monaco",monospace;
+    color:var(--text-dim);
+    max-height:200px;
+    overflow-y:auto;
+    white-space:pre-wrap;
+    margin-top:16px;
+  }
+  .log-line.ok{ color:var(--success); }
+  .log-line.err{ color:var(--danger); }
+
+  .badge{
+    display:inline-block;
+    font-size:11px;
+    padding:2px 8px;
+    border-radius:10px;
+    background:rgba(255,255,255,0.08);
+    color:var(--text-dim);
+    margin-left:6px;
+  }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <h1>Sheet → JSON Tool</h1>
+
+  <div class="status-box">
+    <button id="btnConnectFolder" class="btn-primary btn-block">📁 저장 폴더 연결하기</button>
+    <div id="folderStatus" class="status-text disconnected">연결된 폴더 없음</div>
+  </div>
+
+  <div class="status-box">
+    <button id="btnGoogleLogin" class="btn-secondary btn-block">🔑 구글 로그인</button>
+    <div id="authStatus" class="status-text disconnected">로그인되지 않음</div>
+  </div>
+
+  <div id="tabs">
+    <button class="tab-btn active" data-tab="path">📂 경로</button>
+    <button class="tab-btn" data-tab="parse">⚙️ 파싱</button>
+    <button class="tab-btn" data-tab="config">🔧 API 환경설정</button>
+  </div>
+</div>
+
+<div id="main">
+
+  <!-- ===================== PATH TAB ===================== -->
+  <div class="view active" id="view-path">
+
+    <!-- Sub view 1 : list -->
+    <div id="path-list-view">
+      <div class="top-actions">
+        <div>
+          <h2 style="margin-bottom:4px;">경로 프리셋</h2>
+          <div class="subtitle" style="margin-bottom:0;">구글 시트 → JSON 변환 설정을 프리셋으로 관리합니다.</div>
+        </div>
+        <button id="btnCreatePreset" class="btn-primary">+ 경로 생성</button>
+      </div>
+
+      <div class="card">
+        <table>
+          <thead>
+            <tr>
+              <th>이름</th>
+              <th>시트 탭</th>
+              <th>파일명</th>
+              <th>저장 경로</th>
+              <th style="width:70px;"></th>
+            </tr>
+          </thead>
+          <tbody id="presetTableBody"></tbody>
+        </table>
+        <div id="presetEmptyMsg" class="empty-msg" style="display:none;">저장된 프리셋이 없습니다. "경로 생성" 버튼을 눌러 추가하세요.</div>
+      </div>
+    </div>
+
+    <!-- Sub view 2 : create -->
+    <div id="path-create-view" style="display:none;">
+      <div class="top-actions">
+        <h2>경로 생성</h2>
+        <button id="btnBackToList" class="btn-secondary">← 목록으로</button>
+      </div>
+
+      <div class="card">
+        <div class="form-group">
+          <label>프리셋 이름</label>
+          <input type="text" id="inputPresetName" placeholder="예: 아이템 테이블">
+        </div>
+
+        <div class="form-group">
+          <label>구글 시트 주소 (URL)</label>
+          <input type="text" id="inputSheetUrl" placeholder="https://docs.google.com/spreadsheets/d/xxxxx/edit#gid=0">
+          <div class="hint">전체 URL을 붙여넣으면 Spreadsheet ID가 자동으로 추출됩니다.</div>
+          <div class="hint" id="extractedIdPreview" style="color:var(--accent-hover);"></div>
+        </div>
+
+        <div class="form-group">
+          <label>시트 탭 이름</label>
+          <input type="text" id="inputSheetTab" placeholder="예: Main">
+        </div>
+
+        <div class="form-group">
+          <label>생성될 파일명</label>
+          <input type="text" id="inputFileName" placeholder="예: Data.json">
+        </div>
+
+        <div class="form-group">
+          <label>저장 경로 (선택, 표시용)</label>
+          <input type="text" id="inputSavePath" placeholder="예: Assets/Resources/Data (연결한 폴더 하위 표시용 메모)">
+          <div class="hint">실제 저장 위치는 사이드바에서 연결한 폴더 기준입니다. 이 필드는 프리셋 구분을 위한 메모용 경로입니다.</div>
+        </div>
+
+        <div class="form-actions">
+          <button id="btnSavePreset" class="btn-primary">저장</button>
+          <button id="btnCancelPreset" class="btn-secondary">취소</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== PARSE TAB ===================== -->
+  <div class="view" id="view-parse">
+    <h2>파싱 실행</h2>
+    <div class="subtitle">선택한 프리셋들을 순서대로 불러와 JSON으로 변환하고, 연결된 폴더에 저장합니다.</div>
+
+    <div class="card">
+      <div class="top-actions">
+        <div>
+          <button id="btnSelectAll" class="btn-secondary btn-small">전체선택</button>
+          <button id="btnSelectNone" class="btn-secondary btn-small">선택해제</button>
+        </div>
+        <button id="btnParseRun" class="btn-primary">▶ 파싱 및 자동저장</button>
+      </div>
+
+      <div id="parsePresetList"></div>
+      <div id="parseEmptyMsg" class="empty-msg" style="display:none;">등록된 프리셋이 없습니다. "경로" 탭에서 먼저 생성하세요.</div>
+
+      <div class="log-box" id="logBox">대기 중...</div>
+    </div>
+  </div>
+
+  <!-- ===================== CONFIG TAB ===================== -->
+  <div class="view" id="view-config">
+    <h2>API 환경설정</h2>
+    <div class="subtitle">Google Cloud Console에서 발급받은 키 정보를 입력하세요.</div>
+
+    <div class="card">
+      <div class="form-group">
+        <label>Google API Key</label>
+        <input type="password" id="inputApiKey" placeholder="AIzaSy...">
+        <div class="hint">Google Sheets API가 활성화된 프로젝트의 API 키</div>
+      </div>
+
+      <div class="form-group">
+        <label>OAuth 2.0 Client ID</label>
+        <input type="password" id="inputClientId" placeholder="xxxxxxxx.apps.googleusercontent.com">
+        <div class="hint">비공개(뷰어 권한 미공개) 시트에 접근하려면 필요합니다. 시트가 "링크가 있는 모든 사용자"로 공유되어 있다면 API Key만으로도 동작합니다.</div>
+      </div>
+
+      <div class="form-actions">
+        <button id="btnSaveConfig" class="btn-primary">저장</button>
+      </div>
+      <div id="configSavedMsg" class="status-text" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Google Identity Services & GAPI -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://apis.google.com/js/api.js"></script>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ============================================================
+     STATE
+  ============================================================ */
+  const SCOPES = "https://www.googleapis.com/auth/spreadsheets.readonly";
+  let dirHandle = null;          // FileSystemDirectoryHandle
+  let tokenClient = null;        // GIS token client
+  let accessToken = null;
+  let gapiInited = false;
+  let gisInited = false;
+
+  const LS_PRESETS = "sheetTool_presets";
+  const LS_CONFIG = "sheetTool_config";
+
+  /* ============================================================
+     UTIL
+  ============================================================ */
+  function loadPresets(){
+    try{
+      return JSON.parse(localStorage.getItem(LS_PRESETS)) || [];
+    }catch(e){ return []; }
+  }
+  function savePresets(list){
+    localStorage.setItem(LS_PRESETS, JSON.stringify(list));
+  }
+  function loadConfig(){
+    try{
+      return JSON.parse(localStorage.getItem(LS_CONFIG)) || {apiKey:"", clientId:""};
+    }catch(e){ return {apiKey:"", clientId:""}; }
+  }
+  function saveConfig(cfg){
+    localStorage.setItem(LS_CONFIG, JSON.stringify(cfg));
+  }
+  function extractSpreadsheetId(url){
+    if(!url) return "";
+    const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+    return match ? match[1] : url.trim(); // fallback: 사용자가 ID만 입력했을 수도 있음
+  }
+  function uid(){
+    return "p_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2,7);
+  }
+  function log(msg, type){
+    const box = document.getElementById("logBox");
+    const line = document.createElement("div");
+    line.className = "log-line" + (type ? " " + type : "");
+    const time = new Date().toLocaleTimeString();
+    line.textContent = "[" + time + "] " + msg;
+    if(box.textContent.trim() === "대기 중..."){ box.textContent = ""; }
+    box.appendChild(line);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  /* ============================================================
+     TAB SWITCHING
+  ============================================================ */
+  const tabButtons = document.querySelectorAll(".tab-btn");
+  const views = {
+    path: document.getElementById("view-path"),
+    parse: document.getElementById("view-parse"),
+    config: document.getElementById("view-config")
+  };
+  tabButtons.forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      tabButtons.forEach(b=>b.classList.remove("active"));
+      btn.classList.add("active");
+      Object.values(views).forEach(v=>v.classList.remove("active"));
+      views[btn.dataset.tab].classList.add("active");
+      if(btn.dataset.tab === "path") renderPresetList();
+      if(btn.dataset.tab === "parse") renderParseList();
+    });
+  });
+
+  /* ============================================================
+     FOLDER CONNECT (File System Access API)
+  ============================================================ */
+  const folderStatusEl = document.getElementById("folderStatus");
+  document.getElementById("btnConnectFolder").addEventListener("click", async ()=>{
+    if(!window.showDirectoryPicker){
+      alert("이 브라우저는 File System Access API를 지원하지 않습니다. 최신 Chrome/Edge를 사용해주세요.");
+      return;
+    }
+    try{
+      dirHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+      folderStatusEl.textContent = "✅ 연결됨: " + dirHandle.name;
+      folderStatusEl.classList.remove("disconnected");
+      folderStatusEl.classList.add("connected");
+    }catch(err){
+      if(err.name !== "AbortError"){
+        alert("폴더 연결에 실패했습니다: " + err.message);
+      }
+    }
+  });
+
+  /* ============================================================
+     GOOGLE AUTH (GIS + GAPI)
+  ============================================================ */
+  const authStatusEl = document.getElementById("authStatus");
+  const loginBtn = document.getElementById("btnGoogleLogin");
+
+  function gapiLoaded(){
+    gapi.load("client", async ()=>{
+      const cfg = loadConfig();
+      if(!cfg.apiKey){ return; }
+      try{
+        await gapi.client.init({
+          apiKey: cfg.apiKey,
+          discoveryDocs: ["https://sheets.googleapis.com/$discovery/rest?version=v4"]
+        });
+        gapiInited = true;
+      }catch(e){
+        console.error(e);
+      }
+    });
+  }
+
+  function gisLoaded(){
+    const cfg = loadConfig();
+    if(!cfg.clientId){ return; }
+    try{
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: cfg.clientId,
+        scope: SCOPES,
+        callback: (resp)=>{
+          if(resp.error){
+            alert("구글 인증 실패: " + resp.error);
+            return;
+          }
+          accessToken = resp.access_token;
+          authStatusEl.textContent = "✅ 로그인됨";
+          authStatusEl.classList.remove("disconnected");
+          authStatusEl.classList.add("connected");
+        }
+      });
+      gisInited = true;
+    }catch(e){
+      console.error(e);
+    }
+  }
+
+  // window.onload 대체: 라이브러리가 async로 로드되므로 폴링으로 준비 확인
+  function waitForGoogleLibs(){
+    const iv = setInterval(()=>{
+      if(window.gapi && !gapiInited){ gapiLoaded(); }
+      if(window.google && window.google.accounts && !gisInited){ gisLoaded(); }
+      if(gapiInited && gisInited){ clearInterval(iv); }
+    }, 300);
+  }
+  waitForGoogleLibs();
+
+  loginBtn.addEventListener("click", ()=>{
+    const cfg = loadConfig();
+    if(!cfg.apiKey || !cfg.clientId){
+      alert("먼저 'API 환경설정' 탭에서 Google API Key와 OAuth Client ID를 입력 및 저장해주세요.");
+      return;
+    }
+    if(!gisInited){
+      // 라이브러리가 늦게 로드된 경우 재시도
+      gisLoaded();
+    }
+    if(!tokenClient){
+      alert("구글 인증 라이브러리 초기화에 실패했습니다. 페이지를 새로고침 후 다시 시도해주세요.");
+      return;
+    }
+    tokenClient.requestAccessToken({ prompt: accessToken ? "" : "consent" });
+  });
+
+  /* ============================================================
+     CONFIG TAB
+  ============================================================ */
+  function initConfigView(){
+    const cfg = loadConfig();
+    document.getElementById("inputApiKey").value = cfg.apiKey || "";
+    document.getElementById("inputClientId").value = cfg.clientId || "";
+  }
+  document.getElementById("btnSaveConfig").addEventListener("click", ()=>{
+    const apiKey = document.getElementById("inputApiKey").value.trim();
+    const clientId = document.getElementById("inputClientId").value.trim();
+    if(!apiKey){
+      alert("Google API Key를 입력해주세요.");
+      return;
+    }
+    saveConfig({ apiKey, clientId });
+    const msg = document.getElementById("configSavedMsg");
+    msg.textContent = "저장되었습니다. 라이브러리를 다시 초기화합니다...";
+    msg.classList.add("connected");
+    // 재초기화
+    gapiInited = false; gisInited = false;
+    gapiLoaded(); gisLoaded();
+    setTimeout(()=>{ msg.textContent = "✅ 설정이 저장되었습니다."; }, 500);
+  });
+  initConfigView();
+
+  /* ============================================================
+     PATH TAB — LIST / CREATE
+  ============================================================ */
+  const listView = document.getElementById("path-list-view");
+  const createView = document.getElementById("path-create-view");
+
+  document.getElementById("btnCreatePreset").addEventListener("click", ()=>{
+    clearPresetForm();
+    listView.style.display = "none";
+    createView.style.display = "block";
+  });
+  document.getElementById("btnBackToList").addEventListener("click", ()=>{
+    createView.style.display = "none";
+    listView.style.display = "block";
+  });
+  document.getElementById("btnCancelPreset").addEventListener("click", ()=>{
+    createView.style.display = "none";
+    listView.style.display = "block";
+  });
+
+  function clearPresetForm(){
+    document.getElementById("inputPresetName").value = "";
+    document.getElementById("inputSheetUrl").value = "";
+    document.getElementById("inputSheetTab").value = "";
+    document.getElementById("inputFileName").value = "";
+    document.getElementById("inputSavePath").value = "";
+    document.getElementById("extractedIdPreview").textContent = "";
+  }
+
+  document.getElementById("inputSheetUrl").addEventListener("input", (e)=>{
+    const id = extractSpreadsheetId(e.target.value);
+    const preview = document.getElementById("extractedIdPreview");
+    preview.textContent = id ? ("추출된 Spreadsheet ID: " + id) : "";
+  });
+
+  document.getElementById("btnSavePreset").addEventListener("click", ()=>{
+    const name = document.getElementById("inputPresetName").value.trim();
+    const urlRaw = document.getElementById("inputSheetUrl").value.trim();
+    const tabName = document.getElementById("inputSheetTab").value.trim();
+    const fileName = document.getElementById("inputFileName").value.trim();
+    const savePath = document.getElementById("inputSavePath").value.trim();
+
+    if(!name || !urlRaw || !tabName || !fileName){
+      alert("이름, 시트 주소, 시트 탭 이름, 파일명을 모두 입력해주세요.");
+      return;
+    }
+    const spreadsheetId = extractSpreadsheetId(urlRaw);
+    if(!spreadsheetId){
+      alert("구글 시트 주소에서 Spreadsheet ID를 추출하지 못했습니다. URL을 확인해주세요.");
+      return;
+    }
+    let finalFileName = fileName;
+    if(!finalFileName.toLowerCase().endsWith(".json")){
+      finalFileName += ".json";
+    }
+
+    const presets = loadPresets();
+    presets.push({
+      id: uid(),
+      name,
+      spreadsheetId,
+      sourceUrl: urlRaw,
+      tabName,
+      fileName: finalFileName,
+      savePath: savePath
+    });
+    savePresets(presets);
+
+    createView.style.display = "none";
+    listView.style.display = "block";
+    renderPresetList();
+  });
+
+  function renderPresetList(){
+    const presets = loadPresets();
+    const tbody = document.getElementById("presetTableBody");
+    const emptyMsg = document.getElementById("presetEmptyMsg");
+    tbody.innerHTML = "";
+
+    if(presets.length === 0){
+      emptyMsg.style.display = "block";
+      return;
+    }
+    emptyMsg.style.display = "none";
+
+    presets.forEach(p=>{
+      const tr = document.createElement("tr");
+      tr.innerHTML =
+        '<td>' + escapeHtml(p.name) + '</td>' +
+        '<td>' + escapeHtml(p.tabName) + '</td>' +
+        '<td>' + escapeHtml(p.fileName) + '</td>' +
+        '<td class="path-cell" title="' + escapeHtml(p.savePath||"") + '">' + (escapeHtml(p.savePath) || '<span style="color:var(--text-dim)">-</span>') + '</td>' +
+        '<td><button class="btn-danger btn-small" data-id="' + p.id + '">삭제</button></td>';
+      tbody.appendChild(tr);
+    });
+
+    tbody.querySelectorAll("button[data-id]").forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        if(!confirm("이 프리셋을 삭제하시겠습니까?")) return;
+        const id = btn.dataset.id;
+        const remaining = loadPresets().filter(p=>p.id !== id);
+        savePresets(remaining);
+        renderPresetList();
+      });
+    });
+  }
+
+  function escapeHtml(str){
+    if(str === undefined || str === null) return "";
+    return String(str)
+      .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;").replace(/'/g,"&#039;");
+  }
+
+  /* ============================================================
+     PARSE TAB
+  ============================================================ */
+  function renderParseList(){
+    const presets = loadPresets();
+    const container = document.getElementById("parsePresetList");
+    const emptyMsg = document.getElementById("parseEmptyMsg");
+    container.innerHTML = "";
+
+    if(presets.length === 0){
+      emptyMsg.style.display = "block";
+      return;
+    }
+    emptyMsg.style.display = "none";
+
+    presets.forEach(p=>{
+      const row = document.createElement("div");
+      row.className = "preset-row";
+      row.innerHTML =
+        '<input type="checkbox" class="parse-check" data-id="' + p.id + '">' +
+        '<div class="preset-info">' +
+          '<div class="preset-name">' + escapeHtml(p.name) + '<span class="badge">' + escapeHtml(p.tabName) + '</span></div>' +
+          '<div class="preset-sub">' + escapeHtml(p.fileName) + (p.savePath ? " · " + escapeHtml(p.savePath) : "") + '</div>' +
+        '</div>';
+      container.appendChild(row);
+    });
+  }
+
+  document.getElementById("btnSelectAll").addEventListener("click", ()=>{
+    document.querySelectorAll(".parse-check").forEach(cb=>cb.checked = true);
+  });
+  document.getElementById("btnSelectNone").addEventListener("click", ()=>{
+    document.querySelectorAll(".parse-check").forEach(cb=>cb.checked = false);
+  });
+
+  document.getElementById("btnParseRun").addEventListener("click", async ()=>{
+    if(!dirHandle){
+      alert("먼저 사이드바에서 '저장 폴더 연결하기'로 로컬 폴더를 연결해주세요.");
+      return;
+    }
+    const cfg = loadConfig();
+    if(!cfg.apiKey){
+      alert("먼저 'API 환경설정' 탭에서 Google API Key를 입력 및 저장해주세요.");
+      return;
+    }
+    if(!gapiInited || !gapi.client.sheets){
+      alert("Google API 클라이언트가 아직 준비되지 않았습니다. 잠시 후 다시 시도하거나, 설정 탭에서 저장을 다시 눌러주세요.");
+      return;
+    }
+
+    const checked = Array.from(document.querySelectorAll(".parse-check:checked")).map(cb=>cb.dataset.id);
+    if(checked.length === 0){
+      alert("파싱할 프리셋을 하나 이상 선택해주세요.");
+      return;
+    }
+
+    const presets = loadPresets().filter(p=>checked.includes(p.id));
+    log("총 " + presets.length + "개 프리셋 파싱을 시작합니다.");
+
+    for(const preset of presets){
+      try{
+        log("[" + preset.name + "] 시트 데이터 요청 중...");
+
+        const range = preset.tabName; // 전체 탭 범위
+        const params = {
+          spreadsheetId: preset.spreadsheetId,
+          range: range
+        };
+        // OAuth 토큰이 있으면 세팅 (비공개 시트 대응)
+        if(accessToken){
+          gapi.client.setToken({ access_token: accessToken });
+        }
+
+        const response = await gapi.client.sheets.spreadsheets.values.get(params);
+        const values = response.result.values;
+
+        if(!values || values.length < 1){
+          throw new Error("시트에서 데이터를 가져오지 못했습니다 (빈 응답).");
+        }
+
+        const jsonArray = rowsToObjects(values);
+        const jsonString = JSON.stringify(jsonArray, null, 2);
+
+        await writeFile(preset.fileName, jsonString, preset.savePath);
+
+        log("[" + preset.name + "] ✅ 저장 완료: " + preset.fileName + " (" + jsonArray.length + "개 항목)", "ok");
+
+      }catch(err){
+        console.error(err);
+        let msg = err && err.result && err.result.error ? err.result.error.message : (err.message || String(err));
+        log("[" + preset.name + "] ❌ 실패: " + msg, "err");
+        alert("'" + preset.name + "' 파싱 중 오류가 발생했습니다:\n" + msg);
+      }
+    }
+
+    log("모든 작업이 종료되었습니다.");
+  });
+
+  function rowsToObjects(values){
+    const headers = values[0];
+    const rows = values.slice(1);
+    return rows.map(row=>{
+      const obj = {};
+      headers.forEach((key, idx)=>{
+        if(key === undefined || key === null || key === "") return;
+        obj[key] = row[idx] !== undefined ? row[idx] : "";
+      });
+      return obj;
+    });
+  }
+
+  async function writeFile(fileName, content, savePathHint){
+    // savePath는 표시/메모용이며, 실제 저장은 연결된 dirHandle 최상위에 파일명으로 저장합니다.
+    // 만약 savePathHint에 하위 폴더 구조가 있다면 순차적으로 하위 디렉토리를 생성/탐색합니다.
+    let targetDir = dirHandle;
+    if(savePathHint){
+      const parts = savePathHint.split("/").map(s=>s.trim()).filter(Boolean);
+      for(const part of parts){
+        targetDir = await targetDir.getDirectoryHandle(part, { create: true });
+      }
+    }
+    const fileHandle = await targetDir.getFileHandle(fileName, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(content);
+    await writable.close();
+  }
+
+  /* ============================================================
+     INIT
+  ============================================================ */
+  renderPresetList();
+  renderParseList();
+
+})();
+</script>
+</body>
+</html>
