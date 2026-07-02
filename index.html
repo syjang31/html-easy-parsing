@@ -867,31 +867,14 @@
   function rowsToObjects(values){
     const headers = values[0];
     const rows = values.slice(1);
-
     return rows.map(row=>{
       const obj = {};
       headers.forEach((key, idx)=>{
-        if(!key) return;
-        obj[key] = convertValue(row[idx] !== undefined ? row[idx] : "");
+        if(key === undefined || key === null || key === "") return;
+        obj[key] = row[idx] !== undefined ? row[idx] : "";
       });
       return obj;
     });
-  }
-
-  function convertValue(value){
-    if(value === undefined || value === null) return "";
-    if(typeof value === "number") return value;
-
-    const text = String(value).trim();
-    if(text === "") return "";
-
-    if(/^true$/i.test(text)) return true;
-    if(/^false$/i.test(text)) return false;
-
-    if(/^-?\d+$/.test(text)) return parseInt(text,10);
-    if(/^-?\d+\.\d+$/.test(text)) return parseFloat(text);
-
-    return text;
   }
 
   // groupByColumn이 지정되면: 해당 컬럼 값이 같은 행들을
@@ -900,47 +883,40 @@
   function buildJsonPayload(flatArray, groupByColumn, wrapperKey){
     let result;
 
-    if(groupByColumn){
-      const groupsOrder = [];
-      const groupsMap = {};
+    if(groupByColumn && groupByColumn.trim() !== ""){
+      const map = new Map();
 
       flatArray.forEach(row=>{
         const groupValue = row[groupByColumn];
-        const groupKeyStr = String(groupValue);
 
-        if(!groupsMap[groupKeyStr]){
-          groupsMap[groupKeyStr] = {
-            groupValue: groupValue,
-            entries: []
-          };
-          groupsOrder.push(groupKeyStr);
+        if(!map.has(groupValue)){
+          const groupObj = {};
+          groupObj[groupByColumn] = groupValue;
+          groupObj.entries = [];
+          map.set(groupValue, groupObj);
         }
 
-        // entries 안에는 그룹 기준 컬럼을 뺀 나머지 값들만 넣는다
-        const entryObj = {};
+        const entry = {};
         Object.keys(row).forEach(key=>{
-          if(key === groupByColumn) return;
-          entryObj[key] = row[key];
+          if(key !== groupByColumn){
+            entry[key] = row[key];
+          }
         });
-        groupsMap[groupKeyStr].entries.push(entryObj);
+
+        map.get(groupValue).entries.push(entry);
       });
 
-      result = groupsOrder.map(k=>{
-        const g = groupsMap[k];
-        const obj = {};
-        obj[groupByColumn] = g.groupValue;
-        obj.entries = g.entries;
-        return obj;
-      });
-    } else {
+      result = Array.from(map.values());
+    }else{
       result = flatArray;
     }
 
-    if(wrapperKey){
-      const wrapped = {};
-      wrapped[wrapperKey] = result;
-      return wrapped;
+    if(wrapperKey && wrapperKey.trim() !== ""){
+      const obj = {};
+      obj[wrapperKey] = result;
+      return obj;
     }
+
     return result;
   }
 
