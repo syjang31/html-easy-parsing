@@ -967,7 +967,7 @@
 
     return result;
   }
-  
+
   function convertValue(value, type) {
     if (value === "" || value === null || value === undefined) {
       return "";
@@ -985,10 +985,33 @@
         if (typeof value === "boolean") return value;
         return String(value).toLowerCase() === "true";
   
+      case "array":
+        return parseArrayValue(value);
+  
       case "string":
       default:
         return String(value);
     }
+  }
+  
+  function parseArrayValue(value) {
+    let str = String(value).trim();
+  
+    // 대괄호 제거: "[1001]" -> "1001", "[]" -> ""
+    if (str.startsWith("[") && str.endsWith("]")) {
+      str = str.slice(1, -1).trim();
+    }
+  
+    if (str === "") {
+      return [];
+    }
+  
+    return str.split(",").map(item => {
+      const trimmed = item.trim();
+      const num = Number(trimmed);
+      // 숫자로 변환 가능하면 숫자로, 아니면 문자열 그대로
+      return (trimmed !== "" && !isNaN(num)) ? num : trimmed;
+    });
   }
 
   async function writeFile(fileName, content, savePathHint){
